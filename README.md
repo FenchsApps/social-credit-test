@@ -20,7 +20,7 @@ The **Social Credit Test** is a humorous, interactive bash script designed to si
 ### Clone the Repository
 ```bash
 git clone https://github.com/FenchsApps/social-credit-test.git
-cd social-credit-test
+cd social-credit-test/ChinaLore
 chmod +x SocialTest.sh
 ./SocialTest.sh # DO NOT RUN THIS CRIPT IN SUDO MODE
 ```
