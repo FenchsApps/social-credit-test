@@ -55,9 +55,6 @@ MIT License - See [LICENSE](LICENSE) for details.
 ## 🐛 Known Issues
 
 - Audio may not work in some headless environments
-- Full-screen mode depends on X11 session
-- Timeout detection can be inaccurate on slow systems
-
 ---
 
 **Disclaimer:** This project is satire. The creators do not endorse actual social credit systems. Use responsibly in controlled environments only.
